@@ -2,14 +2,74 @@
 Crawler implementation.
 """
 # pylint: disable=too-many-arguments, too-many-instance-attributes, unused-import, undefined-variable
+import datetime
+import json
 import pathlib
+import re
+from random import randrange
+from time import sleep
 from typing import Pattern, Union
+
+import requests
+from bs4 import BeautifulSoup
+
+from core_utils import constants
+from core_utils.article.article import Article
+from core_utils.article.io import to_meta, to_raw
+from core_utils.config_dto import ConfigDTO
+
+
+class IncorrectSeedURLError(Exception):
+    """
+    The seed url is not alike the pattern.
+    """
+
+    class NumberOfArticlesOutOfRangeError(Exception):
+        """
+        The number of articles is not in range of 1 to 150.
+        """
+
+    class IncorrectNumberOfArticlesError(Exception):
+        """
+        The article number is not integer.
+        """
+
+    class IncorrectHeadersError(Exception):
+        """
+        The headers are not stored in a dictionary.
+        """
+
+    class IncorrectEncodingError(Exception):
+        """
+        The encoding is not a string.
+        """
+
+        class IncorrectTimeoutError(Exception):
+            """
+            The timeout is not an integer or is not in the range.
+            """
+
+        class IncorrectVerifyError(Exception):
+            """
+            Verification check or Headless mode are not boolean.
+            """
 
 
 class Config:
     """
     Class for unpacking and validating configurations.
     """
+    self.path_to_config = path_to_config
+    self._validate_config_content()
+    self.config = self._extract_config_content()
+
+    self._seed_urls = self.config.seed_urls
+    self._num_articles = self.config.total_articles
+    self._headers = self.config.headers
+    self._encoding = self.config.encoding
+    self._timeout = self.config.timeout
+    self._should_verify_certificate = self.config.should_verify_certificate
+    self._headless_mode = self.config.headless_mode
 
     def __init__(self, path_to_config: pathlib.Path) -> None:
         """
@@ -26,11 +86,50 @@ class Config:
         Returns:
             ConfigDTO: Config values
         """
+        with open(self.path_to_config, 'r', encoding='utf-8') as file:
+            config = json.load(file)
+        return ConfigDTO(
+            seed_urls=config["seed_urls"],
+            total_articles_to_find_and_parse=config["total_articles_to_find_and_parse"],
+            headers=config["headers"],
+            encoding=config["encoding"],
+            timeout=config["timeout"],
+            should_verify_certificate=config["should_verify_certificate"],
+            headless_mode=config["headless_mode"]
+        )
 
     def _validate_config_content(self) -> None:
         """
         Ensure configuration parameters are not corrupt.
         """
+        config = self._extract_config_content()
+
+        if not (isinstance(config.seed_urls, list)
+                and all(re.match(r"https?://(www)?\.sbras\.info/news+", seed_url)
+                        for seed_url in config.seed_urls
+                        )
+        ):
+            raise IncorrectSeedURLError
+
+        num = config.total_articles
+        if not isinstance(num, int) or num <= 0:
+            raise IncorrectNumberOfArticlesError
+        if num > 150:
+            raise NumberOfArticlesOutOfRangeError
+
+        if not isinstance(config.headers, dict):
+            raise IncorrectHeadersError
+
+        if not isinstance(config.encoding, str):
+            raise IncorrectEncodingError
+
+        if not isinstance(config.should_verify_certificate, bool) \
+                or not isinstance(config.headless_mode, bool):
+            raise IncorrectVerifyError
+
+        if not isinstance(config.timeout, int) \
+                or config.timeout > 60 or config.timeout < 0:
+            raise IncorrectTimeoutError
 
     def get_seed_urls(self) -> list[str]:
         """
