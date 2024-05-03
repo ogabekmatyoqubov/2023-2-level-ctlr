@@ -5,5 +5,14 @@
     "encoding": "",
     "timeout": 0,
     "should_verify_certificate": true,
-    "headless_mode": true
+    "headless_mode": true,
+    "seed_urls": ["https://usinsk.online/",
+    "https://usinsk.online/mag?page2",
+    "https://usinsk.online/mag?page=3",
+    "https://usinsk.online/mag?page=4",
+    "https://usinsk.online/mag?page=5",
+    "https://usinsk.online/mag?page=6",
+    "https://usinsk.online/mag?page=7",
+    "https://usinsk.online/mag?page=8",
+    "https://usinsk.online/mag?page=9"]
 }

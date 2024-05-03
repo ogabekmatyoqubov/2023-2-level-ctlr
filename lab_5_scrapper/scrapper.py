@@ -102,34 +102,37 @@ class Config:
         """
         Ensure configuration parameters are not corrupt.
         """
-        config = self._extract_config_content()
+        with open(self.path_to_config, 'r', encoding='utf-8') as file:
+            config_data = json.load(file)
 
-        if not (isinstance(config.seed_urls, list)
-                and all(re.match(r"https?://(www)?\.sbras\.info/news+", seed_url)
-                        for seed_url in config.seed_urls
-                        )
-        ):
+        if not (isinstance(config_data['seed_urls'], list)):
             raise IncorrectSeedURLError
 
-        num = config.total_articles
-        if not isinstance(num, int) or num <= 0:
+        for url in config_data['seed_urls']:
+            if not re.match("https?://(www.)?", url):
+                raise IncorrectSeedURLError
+
+        number = config_data["total_articles_to_find_and_parse"]
+        if not isinstance(number, int) or number <= 0:
             raise IncorrectNumberOfArticlesError
-        if num > 150:
+
+        if not 0 < number < 150:
             raise NumberOfArticlesOutOfRangeError
 
-        if not isinstance(config.headers, dict):
+        if not isinstance(config_data['headers'], dict):
             raise IncorrectHeadersError
 
-        if not isinstance(config.encoding, str):
+        if not isinstance(config_data['encoding'], str):
             raise IncorrectEncodingError
 
-        if not isinstance(config.should_verify_certificate, bool) \
-                or not isinstance(config.headless_mode, bool):
+        timeout = config_data['timeout']
+        if not (isinstance(timeout, int) and (0 < timeout < 60)):
+            raise IncorrectTimeoutError
+
+        if not isinstance(config_data['should_verify_certificate'], bool) \
+                or not isinstance(config_data['headless_mode'], bool):
             raise IncorrectVerifyError
 
-        if not isinstance(config.timeout, int) \
-                or config.timeout > 60 or config.timeout < 0:
-            raise IncorrectTimeoutError
 
     def get_seed_urls(self) -> list[str]:
         """
@@ -138,6 +141,7 @@ class Config:
         Returns:
             list[str]: Seed urls
         """
+        return self._seed_urls
 
     def get_num_articles(self) -> int:
         """
@@ -146,6 +150,7 @@ class Config:
         Returns:
             int: Total number of articles to scrape
         """
+        return self._num_articles
 
     def get_headers(self) -> dict[str, str]:
         """
@@ -154,6 +159,7 @@ class Config:
         Returns:
             dict[str, str]: Headers
         """
+        return self._headers
 
     def get_encoding(self) -> str:
         """
@@ -162,6 +168,7 @@ class Config:
         Returns:
             str: Encoding
         """
+        return self._encoding
 
     def get_timeout(self) -> int:
         """
@@ -170,6 +177,7 @@ class Config:
         Returns:
             int: Number of seconds to wait for response
         """
+        return self._timeout
 
     def get_verify_certificate(self) -> bool:
         """
@@ -178,6 +186,7 @@ class Config:
         Returns:
             bool: Whether to verify certificate or not
         """
+        return self._should_verify_certificate
 
     def get_headless_mode(self) -> bool:
         """
@@ -186,6 +195,7 @@ class Config:
         Returns:
             bool: Whether to use headless mode or not
         """
+        return self._headless_mode
 
 
 def make_request(url: str, config: Config) -> requests.models.Response:
@@ -199,6 +209,15 @@ def make_request(url: str, config: Config) -> requests.models.Response:
     Returns:
         requests.models.Response: A response from a request
     """
+    period = random.randrange(2)
+    time.sleep(period)
+    response = requests.get(url=url,
+                            timeout=config.get_timeout(),
+                            headers=config.get_headers(),
+                            verify=config.get_verify_certificate()
+                            )
+    return response
+
 
 
 class Crawler:
@@ -215,6 +234,9 @@ class Crawler:
         Args:
             config (Config): Configuration
         """
+        self.config = config
+        self.urls = []
+        self.url_pattern = self.config.get_seed_urls()[0].split('/mag')[0]
 
     def _extract_url(self, article_bs: BeautifulSoup) -> str:
         """
@@ -226,11 +248,33 @@ class Crawler:
         Returns:
             str: Url from HTML
         """
+        links = article_bs.find_all(class_="post-item__title")
+        for link in links:
+            url = self.url_pattern + str(link.find('a').get('href'))
+            if url not in self.urls:
+                break
+        else:
+            url = ''
+        return url
 
     def find_articles(self) -> None:
         """
         Find articles.
         """
+        seed_urls = self.get_search_urls()
+        for seed_url in seed_urls:
+            response = make_request(seed_url, self.config)
+            if not response.ok:
+                continue
+            soup = BeautifulSoup(response.text, 'lxml')
+            extracted_url = self._extract_url(soup)
+            while extracted_url:
+                if len(self.urls) == self.config.get_num_articles():
+                    break
+                self.urls.append(extracted_url)
+                extracted_url = self._extract_url(soup)
+                if len(self.urls) == self.config.get_num_articles():
+                    break
 
     def get_search_urls(self) -> list:
         """
