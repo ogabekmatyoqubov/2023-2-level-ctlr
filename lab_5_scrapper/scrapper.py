@@ -2,6 +2,7 @@
 Crawler implementation.
 """
 # pylint: disable=too-many-arguments, too-many-instance-attributes, unused-import, undefined-variable
+import os
 import datetime
 import json
 import pathlib
@@ -24,35 +25,35 @@ class IncorrectSeedURLError(Exception):
     The seed url is not alike the pattern.
     """
 
-    class NumberOfArticlesOutOfRangeError(Exception):
-        """
-        The number of articles is not in range of 1 to 150.
-        """
+class NumberOfArticlesOutOfRangeError(Exception):
+    """
+    The number of articles is not in range of 1 to 150.
+    """
 
-    class IncorrectNumberOfArticlesError(Exception):
-        """
-        The article number is not integer.
-        """
+class IncorrectNumberOfArticlesError(Exception):
+    """
+    The article number is not integer.
+    """
 
-    class IncorrectHeadersError(Exception):
-        """
-        The headers are not stored in a dictionary.
-        """
+class IncorrectHeadersError(Exception):
+    """
+    The headers are not stored in a dictionary.
+    """
 
-    class IncorrectEncodingError(Exception):
-        """
-        The encoding is not a string.
-        """
+class IncorrectEncodingError(Exception):
+    """
+    The encoding is not a string.
+    """
 
-        class IncorrectTimeoutError(Exception):
-            """
-            The timeout is not an integer or is not in the range.
-            """
+class IncorrectTimeoutError(Exception):
+    """
+    The timeout is not an integer or is not in the range.
+    """
 
-        class IncorrectVerifyError(Exception):
-            """
-            Verification check or Headless mode are not boolean.
-            """
+class IncorrectVerifyError(Exception):
+    """
+    Verification check or Headless mode are not boolean.
+    """
 
 
 class Config:
@@ -234,7 +235,7 @@ class Crawler:
         """
         self.urls = []
         self.config = config
-        self.url_pattern = 'https://www.comnews.ru/'
+        self.url_pattern = 'https://usinsk.online/'
 
     def _extract_url(self, article_bs: BeautifulSoup) -> str:
         """
@@ -246,9 +247,9 @@ class Crawler:
         Returns:
             str: Url from HTML
         """
-        links = article_bs.find_all(class_="post-item__title")
+        links = article_bs.select("h3[class='entry-title td-module-title'] a")
         for link in links:
-            url = self.url_pattern + str(link.find('a').get('href'))
+            url = link['href']
             if url not in self.urls:
                 break
         else:
@@ -307,6 +308,7 @@ class HTMLParser:
         self.config = config
         self.article = Article(self.full_url, self.article_id)
 
+
     def _fill_article_with_text(self, article_soup: BeautifulSoup) -> None:
         """
         Find text of article.
@@ -315,7 +317,7 @@ class HTMLParser:
             article_soup (bs4.BeautifulSoup): BeautifulSoup instance
         """
         texts = []
-        text_paragraphs = article_soup.find_all(class_="field field-text full-html field-name-body")
+        text_paragraphs = article_soup.find_all('p', style="text-align: justify;")
         for paragraph in text_paragraphs:
             texts.append(paragraph.text)
         self.article.text = ''.join(texts)
@@ -327,7 +329,7 @@ class HTMLParser:
         Args:
             article_soup (bs4.BeautifulSoup): BeautifulSoup instance
         """
-        self.article.title = article_soup.find('h1').text
+        self.article.title = article_soup.select("h1[class='entry-title']")[0].text
         self.article.author = []
         authors = article_soup.find_all(class_="field field-text field-multiple person field-name-authors")
         if authors:
@@ -337,6 +339,8 @@ class HTMLParser:
                 self.article.author.append(tmp)
         else:
             self.article.author.append("NOT FOUND")
+        self.article.date = article_soup.select("time[class='entry-date updated td-module-date']")[0].text
+
 
         # authors = article_soup.find(class_="field field-text field-multiple person field-name-authors")
         # if authors:
@@ -354,6 +358,9 @@ class HTMLParser:
         Returns:
             datetime.datetime: Datetime object
         """
+        dt_obj = datetime.datetime.strptime(date_str, '%d.%m.%Y')
+        return dt_obj
+
 
     def parse(self) -> Union[Article, bool, list]:
         """
