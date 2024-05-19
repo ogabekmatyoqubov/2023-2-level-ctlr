@@ -159,7 +159,7 @@ class Config:
             dict[str, str]: Headers
         """
         return self._headers
-
+print
     def get_encoding(self) -> str:
         """
         Retrieve encoding to use during parsing.
