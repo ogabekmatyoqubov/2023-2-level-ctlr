@@ -9,7 +9,9 @@ import random
 import requests
 import shutil
 import time
+
 from bs4 import BeautifulSoup
+
 from typing import Pattern, Union
 from core_utils.config_dto import ConfigDTO
 from core_utils.constants import ASSETS_PATH, CRAWLER_CONFIG_PATH
