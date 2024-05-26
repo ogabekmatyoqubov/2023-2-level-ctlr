@@ -2,8 +2,8 @@
 Crawler implementation.
 """
 # pylint: disable=too-many-arguments, too-many-instance-attributes, unused-import, undefined-variable
-import os
 import datetime
+import shutil
 import json
 import pathlib
 import random
@@ -108,8 +108,7 @@ class Config:
             if not isinstance(config['seed_urls'], list):
                 raise IncorrectSeedURLError
 
-            if not (isinstance(config['seed_urls'], list)
-                    and all(re.match(r'https?://(www.)?', seed_url) for seed_url in config['seed_urls'])):
+            if not all(seed_url.startswith('https://usinsk.online/') for seed_url in config['seed_urls']):
                 raise IncorrectSeedURLError
 
             if (not isinstance(config['total_articles_to_find_and_parse'], int) or
@@ -159,7 +158,7 @@ class Config:
             dict[str, str]: Headers
         """
         return self._headers
-print
+
     def get_encoding(self) -> str:
         """
         Retrieve encoding to use during parsing.
@@ -208,8 +207,7 @@ def make_request(url: str, config: Config) -> requests.models.Response:
     Returns:
         requests.models.Response: A response from a request
     """
-    period = random.randrange(2)
-    time.sleep(period)
+    time.sleep(random.randrange(3))
     response = requests.get(url=url,
                             timeout=config.get_timeout(),
                             headers=config.get_headers(),
@@ -235,7 +233,6 @@ class Crawler:
         """
         self.urls = []
         self.config = config
-        self.url_pattern = 'https://usinsk.online/'
 
     def _extract_url(self, article_bs: BeautifulSoup) -> str:
         """
@@ -247,32 +244,19 @@ class Crawler:
         Returns:
             str: Url from HTML
         """
-        links = article_bs.select("h3[class='entry-title td-module-title'] a")
-        for link in links:
-            url = link['href']
-            if url not in self.urls:
-                break
-        else:
-            url = ''
-        return url
+        return article_bs['href']
 
     def find_articles(self) -> None:
         """
         Find articles.
         """
-        seed_urls = self.get_search_urls()
-        for seed_url in seed_urls:
-            response = make_request(seed_url, self.config)
-            if not response.ok:
-                continue
-            soup = BeautifulSoup(response.text, 'lxml')
-            extracted_url = self._extract_url(soup)
-            while extracted_url:
-                if len(self.urls) == self.config.get_num_articles():
-                    break
-                self.urls.append(extracted_url)
-                extracted_url = self._extract_url(soup)
-                if len(self.urls) == self.config.get_num_articles():
+        for url in self.get_search_urls():
+            res = make_request(url, self.config)
+            soup = BeautifulSoup(res.text, 'lxml')
+            for link in soup.find_all(class_='more-link'):
+                if self._extract_url(link) not in self.urls:
+                    self.urls.append(self._extract_url(link))
+                if len(self.urls) == (self.config.get_num_articles()):
                     break
 
     def get_search_urls(self) -> list:
@@ -317,10 +301,10 @@ class HTMLParser:
             article_soup (bs4.BeautifulSoup): BeautifulSoup instance
         """
         texts = []
-        text_paragraphs = article_soup.find_all('p', style="text-align: justify;")
+        text_paragraphs = article_soup.find_all(style="text-align: justify;")
         for paragraph in text_paragraphs:
             texts.append(paragraph.text)
-        self.article.text = ''.join(texts)
+        self.article.text = '\n'.join(texts)
 
     def _fill_article_with_meta_information(self, article_soup: BeautifulSoup) -> None:
         """
@@ -329,24 +313,11 @@ class HTMLParser:
         Args:
             article_soup (bs4.BeautifulSoup): BeautifulSoup instance
         """
-        self.article.title = article_soup.select("h1[class='entry-title']")[0].text
-        self.article.author = []
-        authors = article_soup.find_all(class_="field field-text field-multiple person field-name-authors")
-        if authors:
-            for author in authors:
-                tmp = author.find('span').text.split(' ')[-1]
-                # author = ' '.join([i for i in tmp if i])
-                self.article.author.append(tmp)
-        else:
-            self.article.author.append("NOT FOUND")
-        self.article.date = article_soup.select("time[class='entry-date updated td-module-date']")[0].text
-
-
-        # authors = article_soup.find(class_="field field-text field-multiple person field-name-authors")
-        # if authors:
-        # for author in authors:
-        # authors = 'NOT FOUND'
-        # self.article.author = [author[10:]]
+        self.article.title = article_soup.find(class_='entry-title')
+        self.article.author = ['NOT FOUND']
+        self.article.topics = [topic.text for topic in
+                               article_soup.find_all(class_='entry-category')]
+        self.article.date = self.unify_date_format(article_soup.find(class_='td-post-date'))
 
     def unify_date_format(self, date_str: str) -> datetime.datetime:
         """
@@ -358,8 +329,8 @@ class HTMLParser:
         Returns:
             datetime.datetime: Datetime object
         """
-        dt_obj = datetime.datetime.strptime(date_str, '%d.%m.%Y')
-        return dt_obj
+        date_str = date_str[:-4] + date_str[-2:]
+        return datetime.datetime.strptime(date_str, '%d.%m.%y')
 
 
     def parse(self) -> Union[Article, bool, list]:
@@ -371,7 +342,7 @@ class HTMLParser:
         """
         response = make_request(self.full_url, self.config)
         if response.ok:
-            article_bs = BeautifulSoup(response.text, 'html.parser')
+            article_bs = BeautifulSoup(response.text, 'lxml')
             self._fill_article_with_text(article_bs)
             self._fill_article_with_meta_information(article_bs)
 
@@ -385,11 +356,10 @@ def prepare_environment(base_path: Union[pathlib.Path, str]) -> None:
     Args:
         base_path (Union[pathlib.Path, str]): Path where articles stores
     """
-    if not base_path.exists():
-        base_path.mkdir(parents=True, exist_ok=True)
-    else:
-        for file in base_path.iterdir():
-            file.unlink()
+    if base_path.exists():
+        shutil.rmtree(base_path)
+    base_path.mkdir(parents=True)
+
 
 
 
@@ -398,9 +368,10 @@ def main() -> None:
     Entrypoint for scrapper module.
     """
     conf = Config(CRAWLER_CONFIG_PATH)
+    prepare_environment(ASSETS_PATH)
     crawler = Crawler(conf)
     crawler.find_articles()
-    prepare_environment(ASSETS_PATH)
+
 
     for i, url in enumerate(crawler.urls, 1):
         parser = HTMLParser(url, i, conf)
