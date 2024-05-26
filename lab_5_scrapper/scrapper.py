@@ -313,11 +313,14 @@ class HTMLParser:
         Args:
             article_soup (bs4.BeautifulSoup): BeautifulSoup instance
         """
-        self.article.title = article_soup.find(class_='entry-title')
+        self.article.title = article_soup.find(class_='entry-title').text
         self.article.author = ['NOT FOUND']
-        self.article.topics = [topic.text for topic in
-                               article_soup.find_all(class_='entry-category')]
-        self.article.date = self.unify_date_format(article_soup.find(class_='td-post-date'))
+        topics = []
+        topics_soup = article_soup.find_all(class_='entry-category')
+        for topic in topics_soup:
+            topics.append(topic.text)
+        self.article.topics = topics
+        self.article.date = self.unify_date_format(article_soup.find(class_='td-post-date').text)
 
     def unify_date_format(self, date_str: str) -> datetime.datetime:
         """
