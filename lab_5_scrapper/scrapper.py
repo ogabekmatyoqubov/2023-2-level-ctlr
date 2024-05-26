@@ -10,7 +10,6 @@ import shutil
 import time
 
 from typing import Pattern, Union
-
 import requests
 
 from bs4 import BeautifulSoup
