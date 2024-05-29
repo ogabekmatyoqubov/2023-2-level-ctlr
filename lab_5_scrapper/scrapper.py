@@ -143,7 +143,6 @@ class Config:
     def get_num_articles(self) -> int:
         """
         Retrieve total number of articles to scrape.
-
         Returns:
             int: Total number of articles to scrape
         """
@@ -251,6 +250,8 @@ class Crawler:
         """
         for url in self.get_search_urls():
             res = make_request(url, self.config)
+            if not res.ok:
+                continue
             soup = BeautifulSoup(res.text, 'lxml')
             for link in soup.find_all(class_='more-link'):
                 if self._extract_url(link) not in self.urls:
