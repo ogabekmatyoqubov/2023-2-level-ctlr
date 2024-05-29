@@ -254,10 +254,11 @@ class Crawler:
                 continue
             soup = BeautifulSoup(res.text, 'lxml')
             for link in soup.find_all(class_='more-link'):
-                if self._extract_url(link) not in self.urls:
-                    self.urls.append(self._extract_url(link))
                 if len(self.urls) == (self.config.get_num_articles()):
                     break
+                if self._extract_url(link) not in self.urls:
+                    self.urls.append(self._extract_url(link))
+
 
     def get_search_urls(self) -> list:
         """
